@@ -1,0 +1,41 @@
+# ---- Build outputs ----
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+*.exe
+*.out
+
+# ---- Generated files ----
+*.log
+*.pch
+
+# ---- IDE/editor stuff ----
+.vscode/
+*.code-workspace
+
+# ---- ImGui runtime files ----
+imgui.ini
+
+# ---- OS-specific ----
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.cache/
+*.swp
+
+# ---- project-specific ----
+/out.exe
