@@ -14,6 +14,7 @@
 #include "imgui.h"
 #include "scene.h"
 #include "shader.h"
+#include "util.h"
 
 // ----------------------------- utils ---------------------------------
 
@@ -44,9 +45,22 @@ class GameScene : public Scene {
         glClearColor(0.573f, 0.953f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        r.setColor(1, 1, 1, 1);
-        r.fillRect(10, 12, 40, 50);
+        // background
+        r.useShader(r.textureShader);
+        r.setColor({1, 1, 1, 1});
+        r.fillTextureRect({0, 0, 800 * 2, 600 * 2}, texture);
+
+        // foreground
+        r.useShader(r.shapeShader);
+        r.setColor({1, 0, 0, 1});
+        r.fillRect({10, 12, 40, 300});
+
+        // reset
+        r.setColor({1, 1, 1, 1});
     }
+
+   private:
+    Texture texture = Texture("textures/texture_01.png");
 };
 
 // ----------------------------- sample scene2 ---------------------------
@@ -60,8 +74,9 @@ class GameScene2 : public Scene {
         glClearColor(0.573f, 0.953f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        r.setColor(1, 0, 1, 1);
-        r.fillRect(10, 12, 40, 300);
+        // background
+        r.setColor({1, 0, 1, 1});
+        r.fillRect({10, 12, 40, 300});
     }
 };
 
@@ -86,8 +101,7 @@ Renderer::Renderer(GLFWwindow* window) : window(window) {
     ImGui_ImplOpenGL3_Init("#version 330");
 
     // shader
-    shader.emplace("shaders/shape.vert", "shaders/shape.frag");
-    shader->use();
+    currentShader.get().use();
 }
 
 Renderer::~Renderer() {
@@ -107,8 +121,8 @@ void Renderer::run() {
     loadBuffers();
 
     // scenes
-    (void)SceneManager::instance().addScene<GameScene>("game");
-    (void)SceneManager::instance().addScene<GameScene2>("game2");
+    SceneManager::instance().addScene("game", std::make_unique<GameScene>(/*args*/));
+    SceneManager::instance().addScene("game2", std::make_unique<GameScene2>(/*args*/));
 
     SceneManager::instance().setCurrentScene("game");
 
@@ -137,6 +151,7 @@ void Renderer::run() {
         ImGui::Separator();
         ImGui::Text("FPS: %.1f", fps.value);
         ImGui::Text("dt:  %.3f ms", dt * 1000.0f);
+        ImGui::Separator();
         ImGui::End();
 
         endFrame();
@@ -171,11 +186,13 @@ void Renderer::processInput() {
 
 void Renderer::loadBuffers() {
     // Unit quad (0..1) so uPos/uScale can place/size in pixel space
+    // x, y, u, v
     static constexpr float vertices[] = {
-        1.f, 1.f,  // RT
-        1.f, 0.f,  // RB
-        0.f, 0.f,  // LB
-        0.f, 1.f   // LT
+        // pos.x, pos.y,   u, v
+        1.f, 1.f, 1.f, 1.f,  // RT
+        1.f, 0.f, 1.f, 0.f,  // RB
+        0.f, 0.f, 0.f, 0.f,  // LB
+        0.f, 1.f, 0.f, 1.f   // LT
     };
     static constexpr unsigned int indices[] = {
         0, 1, 3,  // first tri
@@ -193,26 +210,52 @@ void Renderer::loadBuffers() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    // pos
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    // uv
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 }
 
-void Renderer::setColor(float r, float g, float b, float a) {
-    glUniform4f(shader->getUniform("uColor"), r, g, b, a);
+void Renderer::setColor(Color c) {
+    glUniform4f(currentShader.get().getUniform("uColor"), c.r, c.g, c.b, c.a);
 }
 
-void Renderer::fillRect(float x, float y, float w, float h) {
+void Renderer::fillRect(Rect r) {
     int winW = 0, winH = 0;
     glfwGetWindowSize(window, &winW, &winH);
 
     // pixel -> NDC via uniforms (shader handles it)
-    const float widthGL = (winW > 0) ? (w / winW) : 0.f;
-    const float heightGL = (winH > 0) ? (h / winH) : 0.f;
-    const float xGL = -1.0f + (x / winW) * 2.0f;
-    const float yGL = -1.0f + (y / winH) * 2.0f;
+    const float widthGL = (winW > 0) ? (r.w / winW) : 0.f;
+    const float heightGL = (winH > 0) ? (r.h / winH) : 0.f;
+    const float xGL = -1.0f + (r.x / winW) * 2.0f;
+    const float yGL = 1.0f - (r.y / winH) * 2.0f - heightGL;
 
-    glUniform2f(shader->getUniform("uPos"), xGL, yGL);
-    glUniform2f(shader->getUniform("uScale"), widthGL, heightGL);
+    glUniform2f(currentShader.get().getUniform("uPos"), xGL, yGL);
+    glUniform2f(currentShader.get().getUniform("uScale"), widthGL, heightGL);
+
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
+void Renderer::fillTextureRect(Rect r, Texture& t) {
+    int winW = 0, winH = 0;
+    glfwGetWindowSize(window, &winW, &winH);
+
+    // pixel -> NDC via uniforms (shader handles it)
+    const float widthGL = (winW > 0) ? (r.w / winW) : 0.f;
+    const float heightGL = (winH > 0) ? (r.h / winH) : 0.f;
+    const float xGL = -1.0f + (r.x / winW) * 2.0f;
+    const float yGL = 1.0f - (r.y / winH) * 2.0f - heightGL;
+
+    glUniform2f(currentShader.get().getUniform("uPos"), xGL, yGL);
+    glUniform2f(currentShader.get().getUniform("uScale"), widthGL, heightGL);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, t.id());
+    glUniform1i(currentShader.get().getUniform("uTex"), 0);
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);

@@ -31,32 +31,12 @@ class SceneManager {
     SceneManager& operator=(SceneManager&&) = delete;
 
     // API
-    void update(float dt) {
-        if (!currentScene.empty())
-            scenes[currentScene]->update(dt);
-    }
+    void update(float dt);
+    void draw(Renderer& r);
 
-    void draw(Renderer& r) {
-        if (!currentScene.empty())
-            scenes[currentScene]->draw(r);
-    }
+    Scene& addScene(const std::string& name, std::unique_ptr<Scene> scene);
 
-    template <typename T, typename... Args>
-    T& addScene(const std::string& name, Args&&... args) {
-        // Emplace a unique_ptr<T> into the map
-        auto scene = std::make_unique<T>(std::forward<Args>(args)...);
-        T& ref = *scene;
-        scenes[name] = std::move(scene);
-        return ref;
-    }
-
-    void setCurrentScene(const std::string& scene) {
-        if (!currentScene.empty())
-            scenes[currentScene]->unload();
-
-        currentScene = scene;
-        scenes[currentScene]->load();
-    }
+    void setCurrentScene(const std::string& scene);
 
     std::string getCurrentScene() const { return currentScene; }
 

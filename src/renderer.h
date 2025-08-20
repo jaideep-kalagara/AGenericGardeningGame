@@ -1,10 +1,11 @@
 #pragma once
 
-#include <optional>
-
 struct GLFWwindow;
+struct Rect;
+struct Color;
 
 #include "shader.h"
+#include "texture.h"
 
 class Renderer {
    public:
@@ -28,8 +29,16 @@ class Renderer {
     void endFrame();
 
     // Draw helpers
-    void setColor(float r, float g, float b, float a = 1.0f);
-    void fillRect(float x, float y, float w, float h);
+    void useShader(Shader& s) {
+        currentShader = s;
+        s.use();
+    }
+    void setColor(Color c);
+    void fillRect(Rect r);
+    void fillTextureRect(Rect r, Texture& t);
+
+    Shader shapeShader = Shader("shaders/shape.vert", "shaders/shape.frag");
+    Shader textureShader = Shader("shaders/texture.vert", "shaders/texture.frag");
 
    private:
     GLFWwindow* window = nullptr;
@@ -37,7 +46,9 @@ class Renderer {
     // GL objects (kept as plain unsigned ints to avoid GL headers here)
     unsigned int VAO = 0, VBO = 0, EBO = 0;
 
-    std::optional<Shader> shader;
+    // shader
+
+    std::reference_wrapper<Shader> currentShader = shapeShader;
 
     // Main loop helpers
     void processInput();

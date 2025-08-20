@@ -2,6 +2,7 @@
 
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
+#include <stb_image.h>
 
 #include <fstream>
 #include <print>
